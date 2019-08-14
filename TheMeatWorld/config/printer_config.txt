@@ -3,6 +3,6 @@
 	2. Go to System Preferences > Printeres & Scanners
 	3. If you do not see your printer, click the plus icon in the left panel and set it up
 	4. Once your printer is set up, right click on it and choose "Set default printer"
-
-***Install tweepy
-	1. pip install tweepy
+	
+***Install twitter
+	1. pip3 install python-twitter

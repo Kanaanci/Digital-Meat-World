@@ -1,81 +1,137 @@
-import os, sys, signal, time, datetime, TMWTwitterSetup
-from pathlib import Path
+import sys
+import os
+import argparse
+import pickle
+import time
+import markov
+import twitter
+import TMWScrCapPrint
 
-def signal_handler(signal, frame):
-	'''
-	we have an infinite loop in main so we need a way to exit gracefully
-	this is it, signals
-	'''
-	print("\nProgram exiting gracefully")
-	sys.exit(0)
+parser = argparse.ArgumentParser(description='Markov chain text generator written in Python.')
+parser.add_argument('-n', metavar='N', type=int, nargs=1, help='Determines length of keys in the program\'s dictionary.')
+parser.add_argument('-i', metavar='I', type=int, nargs=1, help='Determines determines the length of time between tweets.')
+parser.add_argument('--handles', type=str, nargs='+', help='List of twitter handles to use')
+args = parser.parse_args()
 
-signal.signal(signal.SIGINT, signal_handler)
+pickle_file = 'entries.pickle'
+consumer_key = 'CxWocJdPoYSRNJssiCPiyVpOC'
+consumer_secret  = 'NeKK8u28oBLsIr9spsPXbarwdsXKQ3pwJR04YhR5Z2MYNHQ4tt'
+access_token_key = '1104229006893821952-1LWO0zaCwVjzFQOD9jd6FvyHsOYPvv'
+access_token_secret = 'MCMslKZLfAOlL6d6nd2P7s8jADfmeEbSpZ09sXm23ixbp'
+
 def setupDirectory(capturePath):
 	'''
 	make the directory at the capture path
 	'''
 	os.mkdir(capturePath) 
+	
+def dict_save(data, pickle_file):
+	with open(pickle_file, 'a+b') as f:
+		pickle.dump(data, f)
 
-def readConfig():
-	'''
-	read the configuration file
-	this file allows the user to change different settings without
-	actually altering the code
-	'''
-	with open(str(os.getcwd()) + "/config/TMWbotconfig.txt", "r") as f:
-		botSettings = f.readlines()
-			
-	#go to that botSettings list and pull the key out which is between single quotes
-	for i in range(0, len(botSettings)):
-		botSettings[i] = botSettings[i].split("=")
-		
-	return botSettings
-		
-def takeScreenshot(capturePath):
-	'''
-	takes the screenshot, puts it in the directory and names it TweetTweet.png
-	'''
-	os.system("screencapture %sTweetTweet.png" %capturePath) 
-	
-def printImage(capturePath):
-	'''
-	runs a command lpr that prints the file you pointed to
-	'''
-	os.system("lpr %sTweetTweet.png" %capturePath) 
-	
-def postToTwitter(capturePath):
-	'''
-	generate a timestamp to post as the message to the tweet
-	create a variable for file size in mb as the twitter api limits photos to be less than 3mb
-	check if image is less than 3mb
-	'''
-	fileSizeMb = os.path.getsize('%s/TweetTweet.png' %capturePath) / 1024
-	timeStamp = datetime.datetime.now() 
+def dict_load(pickle_file):
+	data = {}
 
-	#if the image is less than 3mb then post it
-	if fileSizeMb < 3072:
-		TMWTwitterSetup.api.update_with_media('%s/TweetTweet.png' %capturePath, status=timeStamp) #post the given file with a status on twitter
+	try:
+		f = open(pickle_file, 'r+b')
+	except FileNotFoundError:
+		f = open(pickle_file, 'w+b')
+
+	try:
+		data = pickle.load(f)
+	except EOFError:
+		if args.handles is None:
+			print("The entries file is currently empty. Perhaps provide a few Twitter handles for our bot to look at?")
+			sys.exit(2)
 	
-def main():
+	f.close()
+	return data
+
+def train(api, data, person):
+	markov_prefix_length = int(args.n[0])
+	total = 0
+	check = 0
+	oldest = None
+
+	# Grabbing initial list of tweets
+	tweets_list = api.GetUserTimeline(screen_name=person, count=1, max_id=oldest)
+
+	while tweets_list and (oldest != check):
+		try:
+			tweets_list = api.GetUserTimeline(screen_name=person, 
+										count=200, 
+										include_rts=False,
+										exclude_replies=True, 
+										max_id=oldest)
+		except:
+			print('Something went wrong getting {person}\'s tweets. Going to next person.'.format(person=person))
+			break
+
+		total += len(tweets_list)
+		check = oldest
+		oldest = tweets_list[-1].id
+		tweet_text = [status.full_text for status in tweets_list]
+
+		# Pass text from status update to markov chain dictionary
+		for text in tweet_text:
+			for key, value in markov.parse_input(text, markov_prefix_length):
+
+				if isinstance(key, markov.ParseLengthError):
+					pass
+				else:
+					markov.build_dict(data, key, value)
+		
+		print("Processed ", total, "tweets, last tweet ID being: ", oldest)
+		# Save dictionary to pickle
+		dict_save(data, pickle_file)
+#		print(data)
+
+
+if __name__ == '__main__':
+	interval = args.i[0]
 	capturePath = str(os.getcwd()) + "/ImageToTweet/" #get the current working directory and add /ImageToTweet/ to it for a new folder
 	startTime = time.time()
-	botSettings = readConfig() #get the list of settings for the bot from readConfig()
-	interval = float(botSettings[0][1]) #interval is at [0][1]
-	
-#	message = str(botSettings[1][1]).rstrip("\n") #may be removed. Not sure what logan will want with the status message for twitter
+	data_table = dict_load(pickle_file)
+	print(len(data_table))
 	
 	#does the directory exist? if not, call the function to create it
-	if not os.path.exists(capturePath): 
-		setupDirectory(capturePath)
+	try:
+		if not os.path.exists(capturePath): 
+			setupDirectory(capturePath)
+	except:
+		print("Something went wrong while creating the directory")
+		sys.exit(2)
 
-	#run this every x amount of seconds
-	while True:
-		print("tick")
-		takeScreenshot(capturePath)
-		postToTwitter(capturePath)
-#		printImage(capturePath)
-		time.sleep(interval - ((time.time() - startTime) % interval))
+	# Authentication using OAuth
+	try:
+		twitter_api = twitter.Api(consumer_key, 
+								consumer_secret, 
+								access_token_key, 
+								access_token_secret, 
+								sleep_on_rate_limit=True,
+								tweet_mode='extended')
+	except:
+		print("Something went wrong with authentication. Did you set your environment variables properly?")
+		sys.exit(2)
+
+	if not args.handles is None:
+		for celebrity in args.handles:
+			print("Fetching ", celebrity, "'s tweets...")
+			train(twitter_api, data_table, celebrity)
 		
-			
-if __name__ == "__main__":
-	main()
+	print("Generating tweets...")
+	while(True):
+		# Take screenshot and check the size
+		TMWScrCapPrint.takeScreenshot(capturePath)
+		TMWScrCapPrint.printImage(capturePath)
+		
+		# Generates a sentence, tweets it, then sleeps.
+		text = markov.generate_sentence(data_table)
+
+		try:
+			twitter_api.PostUpdate(text.capitalize(), media='%s/TweetTweet.png' %capturePath)
+		except twitter.error.TwitterError:
+			pass
+
+		print("New tweet: ", text)
+		time.sleep(interval - ((time.time() - startTime) % interval))
