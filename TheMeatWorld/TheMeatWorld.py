@@ -13,11 +13,12 @@ parser.add_argument('-i', metavar='I', type=int, nargs=1, help='Determines deter
 parser.add_argument('--handles', type=str, nargs='+', help='List of twitter handles to use')
 args = parser.parse_args()
 
+#BEFORE STARTING THE BOT, THE TWTITTER ACCOUNT KEYS MUST BE SET HERE
 pickle_file = 'entries.pickle'
-consumer_key = 'CxWocJdPoYSRNJssiCPiyVpOC'
-consumer_secret  = 'NeKK8u28oBLsIr9spsPXbarwdsXKQ3pwJR04YhR5Z2MYNHQ4tt'
-access_token_key = '1104229006893821952-1LWO0zaCwVjzFQOD9jd6FvyHsOYPvv'
-access_token_secret = 'MCMslKZLfAOlL6d6nd2P7s8jADfmeEbSpZ09sXm23ixbp'
+consumer_key = 'consumer-key'
+consumer_secret  = 'consumer-'
+access_token_key = 'access-token'
+access_token_secret = 'access-token-secret'
 
 def setupDirectory(capturePath):
 	'''
