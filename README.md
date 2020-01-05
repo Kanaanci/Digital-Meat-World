@@ -11,3 +11,6 @@ Commandline Arguments
 
 Example command:<br>
 <b>python3 TheMeatWorld.py -n 20 -i 120 --handles @SadSocrates @philosophytweet @existentialcoms</b>
+
+Example Twitter Account:<br>
+https://twitter.com/themeatworld
