@@ -1,3 +1,4 @@
+# DigitalMeatWorld
 Digital Meat World was created for a Kent State University art student.<br>
 
 This program is a Twitter bot that uses a Markov style chain to generate tweets from a dictionary of words taken from a list of Twitter users.<br>
